@@ -125,11 +125,59 @@ if (-not (Test-Path $envFile)) {
 # ---------------------------------------------------------------------------
 $skillsDir = if ($env:HERMES_HOME) { Join-Path $env:HERMES_HOME 'skills' } else { Join-Path $HOME '.hermes/skills' }
 New-Item -ItemType Directory -Force -Path $skillsDir | Out-Null
-$sync = Join-Path $repo 'tools/skills_sync.py'
-$venvPy = Join-Path $repo 'venv/Scripts/python.exe'
-if ((Test-Path $sync) -and (Test-Path $venvPy)) {
-    & $venvPy $sync 2>$null
-    Write-Host 'Skills synced' -ForegroundColor Green
+Write-Host ''
+Write-Host 'Syncing bundled skills to ~/.hermes/skills/ ...'
+$pyCandidate = $null
+foreach ($candidate in @(
+    (Join-Path $repo '.venv\Scripts\python.exe'),
+    (Join-Path $repo 'venv\Scripts\python.exe')
+)) {
+    if (Test-Path -LiteralPath $candidate) {
+        $pyCandidate = $candidate
+        break
+    }
+}
+if (-not $pyCandidate -and $bootPy) {
+    $pyCandidate = $bootPy.Trim()
+}
+
+$synced = $false
+if ($pyCandidate) {
+    Push-Location $repo
+    try {
+        & $pyCandidate -m tools.skills_sync 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Skills synced' -ForegroundColor Green
+            $synced = $true
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (-not $synced) {
+    # Fallback: copy if sync script fails (missing deps, etc.), leaving existing skills untouched
+    $bundledSkills = Join-Path $repo 'skills'
+    if (Test-Path $bundledSkills) {
+        Get-ChildItem -Path $bundledSkills -Recurse | ForEach-Object {
+            $rel = $_.FullName.Substring($bundledSkills.Length).TrimStart('\', '/')
+            $dest = Join-Path $skillsDir $rel
+            if ($_.PSIsContainer) {
+                if (-not (Test-Path -LiteralPath $dest)) {
+                    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                }
+            } else {
+                if (-not (Test-Path -LiteralPath $dest)) {
+                    $parent = Split-Path -Parent $dest
+                    if (-not (Test-Path -LiteralPath $parent)) {
+                        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+                    }
+                    Copy-Item -LiteralPath $_.FullName -Destination $dest -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        Write-Host 'Skills copied' -ForegroundColor Green
+    }
 }
 
 # ---------------------------------------------------------------------------
