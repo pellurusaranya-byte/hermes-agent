@@ -24,7 +24,8 @@ $lockPath = Join-Path $repo 'pm/lock.json'
 if (-not (Test-Path $lockPath)) { throw 'pm/lock.json not found' }
 $lock = Get-Content -Raw $lockPath | ConvertFrom-Json
 
-$machineArch = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').PROCESSOR_ARCHITECTURE
+$machineArch = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
+if (-not $machineArch) { $machineArch = $env:PROCESSOR_ARCHITECTURE }
 $arch = if ($machineArch -eq 'ARM64') { 'arm64' } else { 'x64' }
 $target = "win32-$arch"
 
